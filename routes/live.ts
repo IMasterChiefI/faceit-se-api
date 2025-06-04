@@ -8,48 +8,55 @@ import {
 
 export const liveRoute = express.Router();
 
+// Route: /live/:playerName
 liveRoute.get('/:playerName', (req, res) => {
   findUserProfile(req.params.playerName)
     .then((player) => {
       if (!player) {
         res.send(
-          `Nie znaleziono gracza ${req.params.playerName}. Wielkość liter w nicku ma znaczenie.`
+          `Spieler ${req.params.playerName} wurde nicht gefunden. Groß- und Kleinschreibung im Nicknamen ist wichtig.`
         );
         return;
       }
 
       if (!player.playsCS2) {
-        res.send(`Ten gracz nigdy nie grał w CS2 na FACEIT.`);
+        res.send(`Dieser Spieler hat noch nie CS2 auf FACEIT gespielt.`);
         return;
       }
 
       getPlayerOngoingMatchId(player.id)
         .then((matchId) => {
           if (!matchId) {
-            res.send(`${req.params.playerName} nie rozgrywa żadnego meczu.`);
+            res.send(`${req.params.playerName} spielt aktuell kein Match.`);
             return;
           }
 
           getMatchV2(matchId)
             .then((match) => {
+              // Falls ?m= leer ist → Weiterleitung zum FACEIT-Raum
               if (req.query.m === '') {
                 res.redirect(`https://www.faceit.com/pl/cs2/room/${matchId}`);
                 return;
               }
 
+              // Standard-Textformat, wenn keines übergeben wird
               let format =
                 (req.query.format as string | undefined) ||
-                `Mapa: $map, Drużyna: $team, Wynik: $team1 ($team1elo ELO) $team1result:$team2result $team2 ($team2elo ELO), Pokój: $matchroom`;
+                `Karte: $map, Team: $team, Ergebnis: $team1 ($team1elo ELO) $team1result:$team2result $team2 ($team2elo ELO), Raum: $matchroom`;
 
+              // ELO-Berechnung Team 1
               let team1Elo = 0;
               for (const player of match.teams.faction1.roster) {
                 team1Elo += player.elo;
               }
+
+              // ELO-Berechnung Team 2
               let team2Elo = 0;
               for (const player of match.teams.faction2.roster) {
                 team2Elo += player.elo;
               }
 
+              // Team-Zuordnung für den angefragten Spieler
               let playerTeam = 1;
               if (
                 match.teams.faction1.roster.filter(
@@ -59,6 +66,7 @@ liveRoute.get('/:playerName', (req, res) => {
                 playerTeam = 2;
               }
 
+              // Platzhalter ersetzen
               format = format
                 .replace('$name', player.username)
                 .replace('$map', match.voting.map.pick[0])
@@ -96,6 +104,7 @@ liveRoute.get('/:playerName', (req, res) => {
                   '$matchroom',
                   `https://www.faceit.com/pl/cs2/room/${matchId}`
                 );
+
               res.send(format);
             })
             .catch((err) => {
