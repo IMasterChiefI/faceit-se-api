@@ -5,49 +5,52 @@ import { handleError } from '../server';
 
 export const statsRoute = express.Router();
 
+// Route: /stats/:playerName
 statsRoute.get('/:playerName', (req, res) => {
   findUserProfile(req.params.playerName)
     .then((player) => {
       if (!player) {
         res.send(
-          `Nie znaleziono gracza ${req.params.playerName}. Wielkość liter w nicku ma znaczenie.`
+          `Spieler ${req.params.playerName} wurde nicht gefunden. Groß- und Kleinschreibung im Nicknamen ist wichtig.`
         );
         return;
       }
 
       if (!player.playsCS2) {
-        res.send(`Ten gracz nigdy nie grał w CS2 na FACEIT.`);
+        res.send(`Dieser Spieler hat noch nie CS2 auf FACEIT gespielt.`);
         return;
       }
 
+      // Standardmäßig: heute ab 00:00 Uhr
       let startDate = new Date();
-      startDate.setHours(0);
-      startDate.setMinutes(0);
-      startDate.setSeconds(0);
+      startDate.setHours(0, 0, 0, 0);
       let size = 100;
 
+      // Optional: ?startDate=[timestamp] erlaubt Rückgriff auf mehr Matches
       if (req.query.startDate && !isNaN(Number(req.query.startDate))) {
         startDate = new Date(Number(req.query.startDate));
         size = 500;
       }
 
+      // Match-Historie abrufen
       getPlayerMatchHistory(player.id, size)
         .then((matches) => {
           if (matches.length === 0) {
-            res.send(
-              'Nie znaleziono meczów z których można wyliczyć statystyki.'
-            );
+            res.send('Keine passenden Matches gefunden, um Statistiken zu berechnen.');
             return;
           }
 
           let wins = 0;
           let losses = 0;
 
+          // Filter: nur heutige (bzw. ab Startdatum) und aus gewünschter Competition
           const todayMatches = matches.filter(
             (match) =>
               startDate.getTime() <= match.created_at &&
               match.competitionId === COMPETITION_ID
           );
+
+          // Restliche Matches zur ELO-Vergleichsbasis
           matches = matches.filter(
             (match) =>
               !todayMatches.includes(match) &&
@@ -71,9 +74,11 @@ statsRoute.get('/:playerName', (req, res) => {
             }
           }
 
+          // Ausgabeformat
           let format =
             (req.query.format as string | undefined) ||
-            `LVL: $lvl, ELO: $elo ($diff), Mecze: $winsW / $lossesL`;
+            `LVL: $lvl, ELO: $elo ($diff), Matches: $winsW / $lossesL`;
+
           format = format
             .replace('$name', player.username)
             .replace('$lvl', String(player.level))
@@ -81,6 +86,7 @@ statsRoute.get('/:playerName', (req, res) => {
             .replace('$diff', String(eloDiff > 0 ? `+${eloDiff}` : eloDiff))
             .replace('$wins', String(wins))
             .replace('$losses', String(losses));
+
           res.send(format);
         })
         .catch((err) => {
