@@ -10,7 +10,6 @@ import { COMPETITION_ID } from './avg';
 
 export const lastRoute = express.Router();
 
-// Route: /last/:playerName – liefert detaillierte Statistiken zum letzten CS2-Match
 lastRoute.get('/:playerName', (req, res) => {
   findUserProfile(req.params.playerName)
     .then((player) => {
@@ -28,34 +27,31 @@ lastRoute.get('/:playerName', (req, res) => {
 
       getPlayerMatchHistory(player.id)
         .then((matches) => {
-          // Filter auf gültige Matches mit ELO oder Competition
           matches = matches.filter(
             (match) => match.elo || match.competitionId === COMPETITION_ID
           );
-
           if (matches.length === 0) {
-            res.send('Es wurde kein Match gefunden, aus dem Statistiken berechnet werden können.');
+            res.send(
+              'Es wurde kein Match gefunden, aus dem Statistiken berechnet werden können.'
+            );
             return;
           }
-
-          // Hole detaillierte Matchstatistiken vom letzten Match
           getMatchStatsV4(matches[0].matchId)
             .then((matchStats) => {
               let playersTeam: MatchStatsTeam | undefined = undefined;
               let enemyTeam: MatchStatsTeam | undefined = undefined;
 
-              // Spielerteam ermitteln
               if (
-                matchStats.rounds[0].teams[0].players.find(
+                matchStats.rounds[0].teams[0].players.filter(
                   (player1) => player1.player_id === player.id
-                )
+                )[0]
               ) {
                 playersTeam = matchStats.rounds[0].teams[0];
                 enemyTeam = matchStats.rounds[0].teams[1];
               } else if (
-                matchStats.rounds[0].teams[1].players.find(
+                matchStats.rounds[0].teams[1].players.filter(
                   (player1) => player1.player_id === player.id
-                )
+                )[0]
               ) {
                 playersTeam = matchStats.rounds[0].teams[1];
                 enemyTeam = matchStats.rounds[0].teams[0];
@@ -66,29 +62,25 @@ lastRoute.get('/:playerName', (req, res) => {
                 return;
               }
 
-              const playerStats = playersTeam.players.find(
-                (p) => p.player_id === player.id
-              );
+              const playerStats = playersTeam.players.filter(
+                (player1) => player1.player_id === player.id
+              )[0];
 
-              // Ausgabeformat
               let format =
                 (req.query.format as string | undefined) ||
                 `Karte: $map, Ergebnis: $score ($result), ELO: $diff, Kills: $kills ($hspercent% HS), Tode: $deaths, K/D: $kd, ADR: $adr`;
-
-              // ELO-Differenz berechnen
               const eloDiff =
                 matches.length >= 2
                   ? isNaN(parseInt(matches[0].elo))
                     ? player.elo - parseInt(matches[1].elo)
                     : parseInt(matches[0].elo) - parseInt(matches[1].elo)
                   : 0;
-
-              // Platzhalter ersetzen
               format = format
                 .replace('$name', player.username)
                 .replace(
                   '$result',
-                  matchStats.rounds[0].round_stats.Winner === playersTeam.team_id
+                  matchStats.rounds[0].round_stats.Winner ===
+                    playersTeam.team_id
                     ? 'Sieg'
                     : 'Niederlage'
                 )
@@ -100,9 +92,14 @@ lastRoute.get('/:playerName', (req, res) => {
                 .replace('$adr', String(playerStats.player_stats.ADR))
                 .replace('$kd', String(playerStats.player_stats['K/D Ratio']))
                 .replace('$kr', String(playerStats.player_stats['K/R Ratio']))
-                .replace('$hspercent', String(playerStats.player_stats['Headshots %']))
-                .replace('$diff', eloDiff > 0 ? `+${eloDiff}` : String(eloDiff));
-
+                .replace(
+                  '$hspercent',
+                  String(playerStats.player_stats['Headshots %'])
+                )
+                .replace(
+                  '$diff',
+                  String(eloDiff > 0 ? `+${eloDiff}` : eloDiff)
+                );
               res.send(format);
             })
             .catch((err) => {
