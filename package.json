@@ -2,7 +2,7 @@
   "name": "faceit-se-api",
   "version": "1.1.0",
   "description": "",
-  "main": "server.js",
+  "main": "dist/server.js",
   "repository": {
     "url": "https://github.com/mxgic1337/faceit-se-api"
   },
